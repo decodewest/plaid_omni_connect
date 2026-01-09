@@ -1,0 +1,41 @@
+name: plaid_omni_connect
+description: Plaid Omni Connect Link integration for Flutter with seamless inline UX across mobile, web, and desktop platforms (iOS, Android, Web, macOS, Windows, Linux).
+version: 1.0.0
+homepage: https://github.com/decodewest/plaid_omni_connect
+repository: https://github.com/decodewest/plaid_omni_connect
+issue_tracker: https://github.com/decodewest/plaid_omni_connect/issues
+documentation: https://github.com/decodewest/plaid_omni_connect#readme
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.10.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_web_plugins:
+    sdk: flutter
+  plugin_platform_interface: ^2.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.decodewest.plaid_omni_connect
+        pluginClass: PlaidOmniConnectPlugin
+      ios:
+        pluginClass: PlaidOmniConnectPlugin
+      macos:
+        pluginClass: PlaidOmniConnectPlugin
+      linux:
+        pluginClass: PlaidOmniConnectPlugin
+      windows:
+        pluginClass: PlaidOmniConnectPlugin
+      web:
+        pluginClass: PlaidOmniConnectWeb
+        fileName: plaid_omni_connect_web.dart

@@ -1,0 +1,22 @@
+PODS:
+  - FlutterMacOS (1.0.0)
+  - plaid_omni_connect (0.0.1):
+    - FlutterMacOS
+
+DEPENDENCIES:
+  - FlutterMacOS (from `Flutter/ephemeral`)
+  - plaid_omni_connect (from `Flutter/ephemeral/.symlinks/plugins/plaid_omni_connect/macos`)
+
+EXTERNAL SOURCES:
+  FlutterMacOS:
+    :path: Flutter/ephemeral
+  plaid_omni_connect:
+    :path: Flutter/ephemeral/.symlinks/plugins/plaid_omni_connect/macos
+
+SPEC CHECKSUMS:
+  FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
+  plaid_omni_connect: a0fb9b116dbdf49121346dff7515b88b642ee80c
+
+PODFILE CHECKSUM: 54d867c82ac51cbd61b565781b9fada492027009
+
+COCOAPODS: 1.16.2

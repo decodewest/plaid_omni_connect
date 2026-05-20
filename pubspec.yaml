@@ -1,6 +1,6 @@
 name: plaid_omni_connect
 description: Plaid Omni Connect Link integration for Flutter with seamless inline UX across mobile, web, and desktop platforms (iOS, Android, Web, macOS, Windows, Linux).
-version: 1.0.0
+version: 1.0.1
 homepage: https://github.com/decodewest/plaid_omni_connect
 repository: https://github.com/decodewest/plaid_omni_connect
 issue_tracker: https://github.com/decodewest/plaid_omni_connect/issues

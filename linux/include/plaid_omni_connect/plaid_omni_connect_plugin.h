@@ -11,12 +11,11 @@ G_BEGIN_DECLS
 #define FLUTTER_PLUGIN_EXPORT
 #endif
 
-typedef struct _PlaidOmniConnectPlugin PlaidOmniConnectPlugin;
-typedef struct {
-  GObjectClass parent_class;
-} PlaidOmniConnectPluginClass;
+G_DECLARE_FINAL_TYPE(PlaidOmniConnectPlugin, plaid_omni_connect_plugin, PLAID,
+                     OMNI_CONNECT_PLUGIN, GObject)
 
-FLUTTER_PLUGIN_EXPORT GType plaid_omni_connect_plugin_get_type();
+FLUTTER_PLUGIN_EXPORT PlaidOmniConnectPlugin* plaid_omni_connect_plugin_new(
+    FlPluginRegistrar* registrar);
 
 FLUTTER_PLUGIN_EXPORT void plaid_omni_connect_plugin_register_with_registrar(
     FlPluginRegistrar* registrar);

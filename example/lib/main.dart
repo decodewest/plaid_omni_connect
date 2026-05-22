@@ -31,7 +31,7 @@ class _DemoScreenState extends State<DemoScreen> {
     text: 'link-sandbox-YOUR-GENERATED-TOKEN', // Replace with valid token
   );
   String _status = 'Ready to connect';
-  List<String> _connectedAccounts = [];
+  final List<String> _connectedAccounts = [];
   bool _isLoading = false;
 
   Future<void> _connectAccount() async {

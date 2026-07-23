@@ -6,9 +6,9 @@
 
 #include "generated_plugin_registrant.h"
 
-#include <plaid_omni_connect/plaid_omni_connect_plugin.h>
+#include <plaid_omni_connect/plaid_omni_connect_plugin_c_api.h>
 
 void RegisterPlugins(flutter::PluginRegistry* registry) {
-  PlaidOmniConnectPluginRegisterWithRegistrar(
-      registry->GetRegistrarForPlugin("PlaidOmniConnectPlugin"));
+  PlaidOmniConnectPluginCApiRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("PlaidOmniConnectPluginCApi"));
 }

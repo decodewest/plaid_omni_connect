@@ -1,3 +1,8 @@
+## 1.0.3
+
+* Align example Windows registrant with `PlaidOmniConnectPluginCApi` and
+  bump example path dependency lock to 1.0.3.
+
 ## 1.0.2
 
 * Fix Windows desktop build: fetch WIL + WebView2 via NuGet in CMake so

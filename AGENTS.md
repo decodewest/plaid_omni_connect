@@ -13,6 +13,10 @@ Archives under `../docs/archives/` are out-of-band (human-EM gate).
 This Artemis workspace folder is a **convenience clone for package maintenance** — it is **not** Neelo’s (or any product app’s) dependency source.
 Consumers depend on the **hosted** version from pub.dev; publish changes, then bump the version constraint in consumers.
 
+**Release path (required):** bump `pubspec.yaml` + `CHANGELOG.md` on `main`, then `git tag vX.Y.Z && git push origin vX.Y.Z`.  
+Do **not** instruct agents to run `dart pub publish` locally — CI publishes via OIDC (see `.github/workflows/publish.yml`).  
+One-time human setup: pub.dev package Admin → enable GitHub Actions publishing with tag pattern `v{{version}}`.
+
 Pluto/Neelo backends own link tokens and secrets; this package must never embed provider secrets.
 
 ## Guardrails

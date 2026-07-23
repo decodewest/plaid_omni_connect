@@ -1,3 +1,10 @@
+## 1.0.2
+
+* Fix Windows desktop build: fetch WIL + WebView2 via NuGet in CMake so
+  `#include <wil/com.h>` / `WebView2.h` resolve on clean machines.
+* Fix Windows plugin registration: use `PlaidOmniConnectPluginCApi` so the
+  generated registrant includes `plaid_omni_connect_plugin_c_api.h`.
+
 ## 1.0.1
 
 * Fix Linux desktop build: GObject type macros, parent window lookup, json-glib link,

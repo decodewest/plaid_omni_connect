@@ -48,6 +48,79 @@ target_include_directories(${PLUGIN_NAME} INTERFACE
   "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(${PLUGIN_NAME} PRIVATE flutter flutter_wrapper_plugin)
 
+# ---------------------------------------------------------------------------
+# Windows Implementation Library (WIL) + WebView2 SDK
+# Required for #include <wil/com.h> and WebView2.h used by the plugin.
+# ---------------------------------------------------------------------------
+set(WIL_VERSION "1.0.240803.1")
+set(WEBVIEW2_VERSION "1.0.2849.39")
+set(NUGET_PACKAGES_DIR "${CMAKE_BINARY_DIR}/packages")
+
+find_program(NUGET_EXE nuget)
+if(NOT NUGET_EXE)
+  set(NUGET_EXE "${CMAKE_BINARY_DIR}/nuget.exe")
+  if(NOT EXISTS "${NUGET_EXE}")
+    message(STATUS "nuget.exe not found; downloading...")
+    file(DOWNLOAD
+      "https://dist.nuget.org/win-x86-commandline/v6.5.0/nuget.exe"
+      "${NUGET_EXE}"
+      EXPECTED_HASH SHA256=d5fce5185de92b7356ea9264b997a620e35c6f6c3c061e471e0dc3a84b3d74fd
+      STATUS nuget_download_status
+      TLS_VERIFY ON
+    )
+    list(GET nuget_download_status 0 nuget_status_code)
+    if(NOT nuget_status_code EQUAL 0)
+      message(FATAL_ERROR
+        "Failed to download nuget.exe (${nuget_download_status}). "
+        "Install NuGet or allow network access to dist.nuget.org, then rebuild.")
+    endif()
+  endif()
+endif()
+
+execute_process(
+  COMMAND "${NUGET_EXE}" install Microsoft.Windows.ImplementationLibrary
+          -Version ${WIL_VERSION} -ExcludeVersion
+          -OutputDirectory "${NUGET_PACKAGES_DIR}"
+  WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+  RESULT_VARIABLE nuget_wil_ret
+)
+if(NOT nuget_wil_ret EQUAL 0)
+  message(FATAL_ERROR
+    "Failed to install NuGet package Microsoft.Windows.ImplementationLibrary.${WIL_VERSION}. "
+    "Check network access to nuget.org.")
+endif()
+
+execute_process(
+  COMMAND "${NUGET_EXE}" install Microsoft.Web.WebView2
+          -Version ${WEBVIEW2_VERSION} -ExcludeVersion
+          -OutputDirectory "${NUGET_PACKAGES_DIR}"
+  WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+  RESULT_VARIABLE nuget_wv2_ret
+)
+if(NOT nuget_wv2_ret EQUAL 0)
+  message(FATAL_ERROR
+    "Failed to install NuGet package Microsoft.Web.WebView2.${WEBVIEW2_VERSION}. "
+    "Check network access to nuget.org.")
+endif()
+
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|aarch64|arm64")
+  set(_PLAID_WV2_ARCH "arm64")
+elseif(CMAKE_SIZEOF_VOID_P EQUAL 8)
+  set(_PLAID_WV2_ARCH "x64")
+else()
+  set(_PLAID_WV2_ARCH "x86")
+endif()
+
+target_include_directories(${PLUGIN_NAME} PRIVATE
+  "${NUGET_PACKAGES_DIR}/Microsoft.Windows.ImplementationLibrary/include"
+  "${NUGET_PACKAGES_DIR}/Microsoft.Web.WebView2/build/native/include"
+)
+
+target_link_libraries(${PLUGIN_NAME} PRIVATE
+  "${NUGET_PACKAGES_DIR}/Microsoft.Web.WebView2/build/native/${_PLAID_WV2_ARCH}/WebView2LoaderStatic.lib"
+  version
+)
+
 # List of absolute paths to libraries that should be bundled with the plugin.
 # This list could contain prebuilt libraries, or libraries created by an
 # external build triggered from this build file.
@@ -85,8 +158,16 @@ add_executable(${TEST_RUNNER}
   ${PLUGIN_SOURCES}
 )
 apply_standard_settings(${TEST_RUNNER})
-target_include_directories(${TEST_RUNNER} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(${TEST_RUNNER} PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}"
+  "${NUGET_PACKAGES_DIR}/Microsoft.Windows.ImplementationLibrary/include"
+  "${NUGET_PACKAGES_DIR}/Microsoft.Web.WebView2/build/native/include"
+)
 target_link_libraries(${TEST_RUNNER} PRIVATE flutter_wrapper_plugin)
+target_link_libraries(${TEST_RUNNER} PRIVATE
+  "${NUGET_PACKAGES_DIR}/Microsoft.Web.WebView2/build/native/${_PLAID_WV2_ARCH}/WebView2LoaderStatic.lib"
+  version
+)
 target_link_libraries(${TEST_RUNNER} PRIVATE gtest_main gmock)
 # flutter_wrapper_plugin has link dependencies on the Flutter DLL.
 add_custom_command(TARGET ${TEST_RUNNER} POST_BUILD

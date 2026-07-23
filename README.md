@@ -169,6 +169,29 @@ void Function(String eventName, LinkEventMetadata metadata)
 
 See the [example](https://github.com/decodewest/plaid_omni_connect/tree/main/example) directory for a full working demo app.
 
+## 🚢 Releasing (maintainers)
+
+Versions are published to **pub.dev** and mirrored as **GitHub Releases** from the same git tag.
+
+**One-time setup on [pub.dev Admin](https://pub.dev/packages/plaid_omni_connect/admin):**
+1. Enable **Automated publishing** → **publishing from GitHub Actions**
+2. Repository: `decodewest/plaid_omni_connect`
+3. Tag pattern: `v{{version}}`
+
+**Each release:**
+1. Bump `version` in `pubspec.yaml` and add a `## X.Y.Z` section to `CHANGELOG.md`
+2. Merge to `main`
+3. Tag and push (do **not** run `dart pub publish` locally):
+
+```bash
+git tag v1.0.3
+git push origin v1.0.3
+```
+
+The [Publish](.github/workflows/publish.yml) workflow then:
+- Publishes to pub.dev via OIDC (no stored tokens)
+- Creates a GitHub Release whose notes come from that CHANGELOG section
+
 ## 📄 License
 
 MIT License - see [LICENSE](LICENSE) file

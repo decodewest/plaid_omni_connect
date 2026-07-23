@@ -1,0 +1,90 @@
+# Publish to pub.dev + create a GitHub Release when a version tag is pushed.
+#
+# Prerequisites (one-time on pub.dev):
+#   Package Admin → Automated publishing → Enable publishing from GitHub Actions
+#   Repository: decodewest/plaid_omni_connect
+#   Tag pattern: v{{version}}
+#
+# Release flow:
+#   1. Merge version bump (pubspec.yaml + CHANGELOG.md) to main
+#   2. git tag vX.Y.Z && git push origin vX.Y.Z
+#   3. This workflow publishes to pub.dev and opens the GitHub Release
+#
+# Docs: https://dart.dev/tools/pub/automated-publishing
+
+name: Publish
+
+on:
+  push:
+    tags:
+      # Must match pub.dev tag pattern v{{version}}
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+
+jobs:
+  publish:
+    permissions:
+      id-token: write # OIDC for pub.dev (no stored secrets)
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@v1
+
+  github_release:
+    name: GitHub Release
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version from tag
+        id: meta
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract CHANGELOG section
+        id: notes
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          python3 <<'PY'
+          import os
+          import pathlib
+          import sys
+
+          version = os.environ["VERSION"]
+          text = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
+          lines = text.splitlines()
+          start = None
+          for i, line in enumerate(lines):
+              if line.strip() == f"## {version}":
+                  start = i + 1
+                  break
+          if start is None:
+              print(f"::error::No CHANGELOG.md section for ## {version}")
+              sys.exit(1)
+
+          body = []
+          for line in lines[start:]:
+              if line.startswith("## "):
+                  break
+              body.append(line)
+          notes = "\n".join(body).strip() + "\n"
+          notes += (
+              f"\n---\n"
+              f"**pub.dev:** https://pub.dev/packages/plaid_omni_connect/versions/{version}\n"
+          )
+          out = pathlib.Path("release_notes.md")
+          out.write_text(notes, encoding="utf-8")
+          print(out.read_text(encoding="utf-8"))
+          PY
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.tag }}
+          body_path: release_notes.md
+          generate_release_notes: false

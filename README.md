@@ -55,6 +55,9 @@ Requires WebView2 runtime (pre-installed on Windows 11).
 
 For Windows 10, download: [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)
 
+The first Windows build downloads NuGet packages **Microsoft.Windows.ImplementationLibrary**
+and **Microsoft.Web.WebView2** (needs network access to `nuget.org` / `dist.nuget.org`).
+
 #### Linux
 Install WebKitGTK:
 

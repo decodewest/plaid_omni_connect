@@ -115,7 +115,7 @@ class PlaidOmniConnectPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
     activity = binding.activity
   }
 
-  override fun onDetachedFromActivityForConfigChanges() { binding: ActivityPluginBinding
+  override fun onDetachedFromActivityForConfigChanges() {
     activity = null
   }
 

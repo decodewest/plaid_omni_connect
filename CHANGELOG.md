@@ -1,3 +1,9 @@
+## 1.0.4
+
+* Fix Android Kotlin compile: `onDetachedFromActivityForConfigChanges` must take
+  no parameters (`ActivityAware` contract). Removes stray `binding` token that
+  broke `:plaid_omni_connect:compileDebugKotlin`.
+
 ## 1.0.3
 
 * Align example Windows registrant with `PlaidOmniConnectPluginCApi` and

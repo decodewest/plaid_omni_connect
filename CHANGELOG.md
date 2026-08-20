@@ -1,3 +1,9 @@
+## 1.0.5
+
+* Add Swift Package Manager support for iOS and macOS.
+* Present Plaid Link from the Flutter view / UIScene key window instead of
+  `UIApplication.delegate.window`, which is unset after UIScene adoption.
+
 ## 1.0.4
 
 * Fix Android Kotlin compile: `onDetachedFromActivityForConfigChanges` must take

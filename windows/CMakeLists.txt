@@ -119,6 +119,7 @@ target_include_directories(${PLUGIN_NAME} PRIVATE
 target_link_libraries(${PLUGIN_NAME} PRIVATE
   "${NUGET_PACKAGES_DIR}/Microsoft.Web.WebView2/build/native/${_PLAID_WV2_ARCH}/WebView2LoaderStatic.lib"
   version
+  shlwapi
 )
 
 # List of absolute paths to libraries that should be bundled with the plugin.
@@ -167,6 +168,7 @@ target_link_libraries(${TEST_RUNNER} PRIVATE flutter_wrapper_plugin)
 target_link_libraries(${TEST_RUNNER} PRIVATE
   "${NUGET_PACKAGES_DIR}/Microsoft.Web.WebView2/build/native/${_PLAID_WV2_ARCH}/WebView2LoaderStatic.lib"
   version
+  shlwapi
 )
 target_link_libraries(${TEST_RUNNER} PRIVATE gtest_main gmock)
 # flutter_wrapper_plugin has link dependencies on the Flutter DLL.

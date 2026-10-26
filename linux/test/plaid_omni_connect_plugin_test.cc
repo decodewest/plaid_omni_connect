@@ -1,31 +1,15 @@
-#include <flutter_linux/flutter_linux.h>
-#include <gmock/gmock.h>
+#include "../../common/plaid_link_message.h"
+
 #include <gtest/gtest.h>
 
-#include "include/plaid_omni_connect/plaid_omni_connect_plugin.h"
-#include "plaid_omni_connect_plugin_private.h"
-
-// This demonstrates a simple unit test of the C portion of this plugin's
-// implementation.
-//
-// Once you have built the plugin's example app, you can run these tests
-// from the command line. For instance, for a plugin called my_plugin
-// built for x64 debug, run:
-// $ build/linux/x64/debug/plugins/my_plugin/my_plugin_test
-
-namespace plaid_omni_connect {
-namespace test {
-
-TEST(PlaidOmniConnectPlugin, GetPlatformVersion) {
-  g_autoptr(FlMethodResponse) response = get_platform_version();
-  ASSERT_NE(response, nullptr);
-  ASSERT_TRUE(FL_IS_METHOD_SUCCESS_RESPONSE(response));
-  FlValue* result = fl_method_success_response_get_result(
-      FL_METHOD_SUCCESS_RESPONSE(response));
-  ASSERT_EQ(fl_value_get_type(result), FL_VALUE_TYPE_STRING);
-  // The full string varies, so just validate that it has the right format.
-  EXPECT_THAT(fl_value_get_string(result), testing::StartsWith("Linux "));
+TEST(PlaidLinkMessage, TerminalStatesCloseTheHost) {
+  EXPECT_TRUE(plaid_link_message_is_terminal(
+      "{\"type\":\"success\",\"publicToken\":\"public-sandbox\"}"));
+  EXPECT_TRUE(plaid_link_message_is_terminal(
+      "{\"error\":null,\"type\":\"exit\",\"metadata\":{\"status\":\"\"}}"));
+  EXPECT_TRUE(plaid_link_message_is_terminal(
+      "{\"type\":\"error\",\"error\":\"Link page failed\"}"));
+  EXPECT_FALSE(plaid_link_message_is_terminal(
+      "{\"type\":\"event\",\"eventName\":\"OPEN\"}"));
+  EXPECT_FALSE(plaid_link_message_is_terminal(nullptr));
 }
-
-}  // namespace test
-}  // namespace plaid_omni_connect

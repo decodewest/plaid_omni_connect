@@ -4,10 +4,10 @@ import 'plaid_models.dart';
 class PlaidLinkConfiguration {
   /// Link token from your backend
   final String linkToken;
-  
+
   /// Skip loading state (show Plaid UI immediately)
   final bool noLoadingState;
-  
+
   const PlaidLinkConfiguration({
     required this.linkToken,
     this.noLoadingState = false,

@@ -1,8 +1,9 @@
 #include "include/plaid_omni_connect/plaid_omni_connect_plugin.h"
 
+#include "../common/plaid_link_message.h"
+
 #include <flutter_linux/flutter_linux.h>
 #include <gtk/gtk.h>
-#include <json-glib/json-glib.h>
 #include <webkit2/webkit2.h>
 
 struct _PlaidOmniConnectPlugin {
@@ -15,11 +16,11 @@ struct _PlaidOmniConnectPlugin {
 
 G_DEFINE_TYPE(PlaidOmniConnectPlugin, plaid_omni_connect_plugin, G_TYPE_OBJECT)
 
-static void open_plaid_link(PlaidOmniConnectPlugin* self, const gchar* link_token);
-static gchar* create_plaid_html(const gchar* link_token);
+static void open_plaid_link(PlaidOmniConnectPlugin* self, const gchar* page_html);
 static void on_script_message_received(WebKitUserContentManager* manager,
                                        WebKitJavascriptResult* js_result,
                                        gpointer user_data);
+static void forward_link_message(PlaidOmniConnectPlugin* self, const gchar* json);
 static void close_dialog(PlaidOmniConnectPlugin* self);
 static void invoke_dart_callback(PlaidOmniConnectPlugin* self,
                                  const gchar* method, FlValue* args);
@@ -59,15 +60,16 @@ static void method_call_handler(FlMethodChannel* channel, FlMethodCall* method_c
   FlValue* args = fl_method_call_get_args(method_call);
 
   if (strcmp(method, "open") == 0) {
-    FlValue* link_token_value = fl_value_lookup_string(args, "linkToken");
-    if (link_token_value == nullptr ||
-        fl_value_get_type(link_token_value) != FL_VALUE_TYPE_STRING) {
-      fl_method_call_respond_error(method_call, "INVALID_ARGS", "Missing linkToken",
+    FlValue* page_html_value = fl_value_lookup_string(args, "pageHtml");
+    if (page_html_value == nullptr ||
+        fl_value_get_type(page_html_value) != FL_VALUE_TYPE_STRING ||
+        fl_value_get_string(page_html_value)[0] == '\0') {
+      fl_method_call_respond_error(method_call, "INVALID_ARGS", "Missing pageHtml",
                                   nullptr, nullptr);
       return;
     }
 
-    open_plaid_link(self, fl_value_get_string(link_token_value));
+    open_plaid_link(self, fl_value_get_string(page_html_value));
     fl_method_call_respond_success(method_call, nullptr, nullptr);
   } else if (strcmp(method, "close") == 0) {
     close_dialog(self);
@@ -77,8 +79,26 @@ static void method_call_handler(FlMethodChannel* channel, FlMethodCall* method_c
   }
 }
 
+static gboolean close_dialog_later(gpointer user_data) {
+  PlaidOmniConnectPlugin* self = PLAID_OMNI_CONNECT_PLUGIN(user_data);
+  close_dialog(self);
+  g_object_unref(self);
+  return G_SOURCE_REMOVE;
+}
+
+static void forward_link_message(PlaidOmniConnectPlugin* self, const gchar* json) {
+  if (json == nullptr) {
+    return;
+  }
+  g_autoptr(FlValue) message = fl_value_new_string(json);
+  invoke_dart_callback(self, "onLinkMessage", message);
+  if (plaid_link_message_is_terminal(json)) {
+    g_idle_add(close_dialog_later, g_object_ref(self));
+  }
+}
+
 static void open_plaid_link(PlaidOmniConnectPlugin* self,
-                            const gchar* link_token) {
+                            const gchar* page_html) {
   GtkWindow* parent = parent_window_for_plugin(self);
 
   self->dialog = gtk_dialog_new();
@@ -102,138 +122,25 @@ static void open_plaid_link(PlaidOmniConnectPlugin* self,
 
   WebKitUserContentManager* manager =
       webkit_web_view_get_user_content_manager(self->web_view);
-  g_signal_connect(manager, "script-message-received::plaidLink",
+  webkit_user_content_manager_register_script_message_handler(manager,
+                                                              "plaidLinkHandler");
+  g_signal_connect(manager, "script-message-received::plaidLinkHandler",
                    G_CALLBACK(on_script_message_received), self);
-  webkit_user_content_manager_register_script_message_handler(manager, "plaidLink");
 
-  gchar* html = create_plaid_html(link_token);
-  webkit_web_view_load_html(self->web_view, html, "https://cdn.plaid.com");
-  g_free(html);
+  webkit_web_view_load_html(self->web_view, page_html, "https://cdn.plaid.com");
 
   gtk_widget_show_all(self->dialog);
-}
-
-static gchar* create_plaid_html(const gchar* link_token) {
-  return g_strdup_printf(
-      "<!DOCTYPE html>"
-      "<html><head>"
-      "<script "
-      "src='https://cdn.plaid.com/link/v2/stable/link-initialize.js'></script>"
-      "<style>"
-      "body { margin: 0; font-family: sans-serif; overflow: hidden; }"
-      "#container { width: 100%%; height: 100vh; }"
-      ".loading { display: flex; align-items: center; justify-content: center; "
-      "height: 100vh; }"
-      "</style>"
-      "</head><body>"
-      "<div id='container'><div class='loading'>Loading...</div></div>"
-      "<script>"
-      "const handler = Plaid.create({"
-      "  token: '%s',"
-      "  onSuccess: (publicToken, metadata) => {"
-      "    window.webkit.messageHandlers.plaidLink.postMessage({"
-      "      type: 'success', publicToken: publicToken, metadata: metadata"
-      "    });"
-      "  },"
-      "  onExit: (err, metadata) => {"
-      "    window.webkit.messageHandlers.plaidLink.postMessage({"
-      "      type: 'exit', error: err, metadata: metadata"
-      "    });"
-      "  },"
-      "  onEvent: (eventName, metadata) => {"
-      "    window.webkit.messageHandlers.plaidLink.postMessage({"
-      "      type: 'event', eventName: eventName, metadata: metadata"
-      "    });"
-      "  },"
-      "  onLoad: () => {"
-      "    document.querySelector('.loading').style.display = 'none';"
-      "  }"
-      "});"
-      "handler.open();"
-      "</script></body></html>",
-      link_token);
-}
-
-static FlValue* json_object_to_fl_value(JsonObject* object) {
-  g_autoptr(FlValue) map = fl_value_new_map();
-  if (object == nullptr) {
-    return fl_value_ref(map);
-  }
-
-  JsonObjectIter iter;
-  json_object_iter_init(&iter, object);
-  const gchar* member_name = nullptr;
-  JsonNode* member_value = nullptr;
-  while (json_object_iter_next(&iter, &member_name, &member_value)) {
-    if (member_name == nullptr || member_value == nullptr) {
-      continue;
-    }
-    if (JSON_NODE_HOLDS_VALUE(member_value)) {
-      GValue gvalue = G_VALUE_INIT;
-      json_node_get_value(member_value, &gvalue);
-      if (G_VALUE_HOLDS_STRING(&gvalue)) {
-        fl_value_set_string_take(
-            map, member_name,
-            fl_value_new_string(g_value_get_string(&gvalue)));
-      }
-      g_value_unset(&gvalue);
-    }
-  }
-  return fl_value_ref(map);
 }
 
 static void on_script_message_received(WebKitUserContentManager* manager,
                                        WebKitJavascriptResult* js_result,
                                        gpointer user_data) {
+  (void)manager;
   PlaidOmniConnectPlugin* self = PLAID_OMNI_CONNECT_PLUGIN(user_data);
 
   JSCValue* value = webkit_javascript_result_get_js_value(js_result);
   gchar* str_value = jsc_value_to_string(value);
-
-  JsonParser* parser = json_parser_new();
-  if (json_parser_load_from_data(parser, str_value, -1, nullptr)) {
-    JsonNode* root = json_parser_get_root(parser);
-    JsonObject* obj = json_node_get_object(root);
-    const gchar* type = json_object_get_string_member(obj, "type");
-
-    if (g_strcmp0(type, "success") == 0) {
-      const gchar* public_token =
-          json_object_get_string_member(obj, "publicToken");
-      JsonObject* metadata =
-          json_object_get_object_member(obj, "metadata");
-      g_autoptr(FlValue) args = fl_value_new_map();
-      fl_value_set_string_take(
-          args, "publicToken",
-          fl_value_new_string(public_token != nullptr ? public_token : ""));
-      fl_value_set_string_take(args, "metadata",
-                               json_object_to_fl_value(metadata));
-      invoke_dart_callback(self, "onSuccess", args);
-      close_dialog(self);
-    } else if (g_strcmp0(type, "exit") == 0) {
-      JsonObject* metadata =
-          json_object_get_object_member(obj, "metadata");
-      g_autoptr(FlValue) args = fl_value_new_map();
-      fl_value_set_string(args, "error", fl_value_new_null());
-      fl_value_set_string_take(args, "metadata",
-                               json_object_to_fl_value(metadata));
-      invoke_dart_callback(self, "onExit", args);
-      close_dialog(self);
-    } else if (g_strcmp0(type, "event") == 0) {
-      const gchar* event_name =
-          json_object_get_string_member(obj, "eventName");
-      JsonObject* metadata =
-          json_object_get_object_member(obj, "metadata");
-      g_autoptr(FlValue) args = fl_value_new_map();
-      fl_value_set_string_take(
-          args, "eventName",
-          fl_value_new_string(event_name != nullptr ? event_name : ""));
-      fl_value_set_string_take(args, "metadata",
-                               json_object_to_fl_value(metadata));
-      invoke_dart_callback(self, "onEvent", args);
-    }
-  }
-
-  g_object_unref(parser);
+  forward_link_message(self, str_value);
   g_free(str_value);
 }
 

@@ -8,6 +8,7 @@ class PlaidLinkHandler: NSObject, WKNavigationDelegate, WKScriptMessageHandler, 
     private var parentWindow: NSWindow?
     private var channel: FlutterMethodChannel
     private var popupWindow: NSWindow?
+    private var finished = false
     
     init(channel: FlutterMethodChannel, parentWindow: NSWindow?) {
         self.channel = channel
@@ -15,7 +16,7 @@ class PlaidLinkHandler: NSObject, WKNavigationDelegate, WKScriptMessageHandler, 
         super.init()
     }
     
-    func openPlaidLink(linkToken: String) {
+    func openPlaidLink(pageHtml: String) {
         // Configure WebView
         let config = WKWebViewConfiguration()
         let contentController = WKUserContentController()
@@ -72,85 +73,7 @@ class PlaidLinkHandler: NSObject, WKNavigationDelegate, WKScriptMessageHandler, 
             panel?.animator().alphaValue = 1.0
         })
         
-        // Load Plaid Link
-        let htmlString = createPlaidHTML(linkToken: linkToken)
-        webView?.loadHTMLString(htmlString, baseURL: URL(string: "https://cdn.plaid.com"))
-    }
-    
-    private func createPlaidHTML(linkToken: String) -> String {
-        return """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
-            <style>
-                body {
-                    margin: 0;
-                    padding: 0;
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-                    overflow: hidden;
-                }
-                #plaid-container {
-                    width: 100%;
-                    height: 100vh;
-                }
-                .loading {
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    height: 100vh;
-                    font-size: 18px;
-                    color: #666;
-                }
-            </style>
-        </head>
-        <body>
-            <div id="plaid-container">
-                <div class="loading">Loading Plaid Link...</div>
-            </div>
-            <script>
-                try {
-                    const handler = Plaid.create({
-                        token: '\(linkToken)',
-                        onSuccess: (public_token, metadata) => {
-                            window.webkit.messageHandlers.plaidLinkHandler.postMessage({
-                                type: 'success',
-                                publicToken: public_token,
-                                metadata: metadata
-                            });
-                        },
-                        onExit: (err, metadata) => {
-                            window.webkit.messageHandlers.plaidLinkHandler.postMessage({
-                                type: 'exit',
-                                error: err,
-                                metadata: metadata
-                            });
-                        },
-                        onEvent: (eventName, metadata) => {
-                            window.webkit.messageHandlers.plaidLinkHandler.postMessage({
-                                type: 'event',
-                                eventName: eventName,
-                                metadata: metadata
-                            });
-                        },
-                        onLoad: () => {
-                            document.querySelector('.loading').style.display = 'none';
-                        }
-                    });
-                    
-                    handler.open();
-                } catch (error) {
-                    window.webkit.messageHandlers.plaidLinkHandler.postMessage({
-                        type: 'error',
-                        error: error.message
-                    });
-                }
-            </script>
-        </body>
-        </html>
-        """
+        webView?.loadHTMLString(pageHtml, baseURL: URL(string: "https://cdn.plaid.com"))
     }
     
     func closePanel(animated: Bool = true) {
@@ -179,48 +102,57 @@ class PlaidLinkHandler: NSObject, WKNavigationDelegate, WKScriptMessageHandler, 
     
     func userContentController(_ userContentController: WKUserContentController,
                               didReceive message: WKScriptMessage) {
-        guard let body = message.body as? [String: Any],
-              let type = body["type"] as? String else { return }
-        
-        switch type {
-        case "success":
-            channel.invokeMethod("onSuccess", arguments: [
-                "publicToken": body["publicToken"] ?? "",
-                "metadata": body["metadata"] ?? [:]
-            ])
-            closePanel(animated: true)
-            
-        case "exit":
-            channel.invokeMethod("onExit", arguments: [
-                "error": body["error"] as Any,
-                "metadata": body["metadata"] ?? [:]
-            ])
-            closePanel(animated: true)
-            
-        case "event":
-            channel.invokeMethod("onEvent", arguments: [
-                "eventName": body["eventName"] ?? "",
-                "metadata": body["metadata"] ?? [:]
-            ])
-            
-        case "error":
-            channel.invokeMethod("onError", arguments: [
-                "error": body["error"] ?? "Unknown error"
-            ])
-            closePanel(animated: true)
-            
-        default:
-            break
-        }
+        guard let json = jsonText(from: message.body) else { return }
+        forward(json)
     }
     
     func webView(_ webView: WKWebView,
                 didFail navigation: WKNavigation!,
                 withError error: Error) {
-        channel.invokeMethod("onError", arguments: [
-            "error": error.localizedDescription
-        ])
-        closePanel(animated: true)
+        forward(errorPayload(error.localizedDescription))
+    }
+
+    func webView(_ webView: WKWebView,
+                didFailProvisionalNavigation navigation: WKNavigation!,
+                withError error: Error) {
+        forward(errorPayload(error.localizedDescription))
+    }
+
+    private func forward(_ json: String) {
+        let terminal = isTerminalLinkMessage(json)
+        if terminal {
+            if finished { return }
+            finished = true
+        }
+        channel.invokeMethod("onLinkMessage", arguments: json)
+        if terminal {
+            closePanel(animated: true)
+        }
+    }
+
+    private func jsonText(from body: Any) -> String? {
+        if let text = body as? String {
+            return text
+        }
+        guard JSONSerialization.isValidJSONObject(body),
+              let data = try? JSONSerialization.data(withJSONObject: body),
+              let text = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        return text
+    }
+
+    private func errorPayload(_ message: String) -> String {
+        let escaped = message
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "{\"type\":\"error\",\"error\":\"\(escaped)\"}"
+    }
+
+    private func isTerminalLinkMessage(_ json: String) -> Bool {
+        return json.contains("\"type\":\"success\"")
+            || json.contains("\"type\":\"exit\"")
+            || json.contains("\"type\":\"error\"")
     }
     
     // MARK: - WKUIDelegate

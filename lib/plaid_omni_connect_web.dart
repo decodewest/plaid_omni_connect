@@ -38,7 +38,8 @@ class PlaidOmniConnectWeb {
       default:
         throw PlatformException(
           code: 'Unimplemented',
-          details: 'plaid_omni_connect for web doesn\'t implement \'${call.method}\'',
+          details:
+              'plaid_omni_connect for web doesn\'t implement \'${call.method}\'',
         );
     }
   }
@@ -61,21 +62,24 @@ class PlaidOmniConnectWeb {
     final plaidOptions = js.JsObject.jsify({
       'token': linkToken,
       'onSuccess': (publicToken, metadata) {
-        _channel.invokeMethod('onSuccess', {
-          'publicToken': publicToken,
-          'metadata': _jsObjectToMap(metadata),
+        _emit({
+          'type': 'success',
+          'publicToken': _plain(publicToken) ?? '',
+          'metadata': _plain(metadata) ?? <String, dynamic>{},
         });
       },
       'onExit': (error, metadata) {
-         _channel.invokeMethod('onExit', {
-          'error': error != null ? _jsObjectToMap(error) : null,
-          'metadata': _jsObjectToMap(metadata),
+        _emit({
+          'type': 'exit',
+          'error': error == null ? null : _plain(error),
+          'metadata': _plain(metadata) ?? <String, dynamic>{},
         });
       },
       'onEvent': (eventName, metadata) {
-        _channel.invokeMethod('onEvent', {
-          'eventName': eventName,
-          'metadata': _jsObjectToMap(metadata),
+        _emit({
+          'type': 'event',
+          'eventName': _plain(eventName) ?? '',
+          'metadata': _plain(metadata) ?? <String, dynamic>{},
         });
       },
     });
@@ -84,20 +88,22 @@ class PlaidOmniConnectWeb {
     handler.callMethod('open');
   }
 
-  Map<String, dynamic> _jsObjectToMap(dynamic jsObject) {
-    if (jsObject == null) return {};
-    if (jsObject is! js.JsObject) return {'value': jsObject};
-    
-    // Simple recursive converter for basic Plaid metadata
-    // Plaid metadata is usually flat or simple nested objects.
-    // dart:js JsObject conversion is manual.
-    // We can use context['JSON']['stringify'] and then jsonDecode in Dart for safety
+  void _emit(Map<String, dynamic> message) {
+    _channel.invokeMethod('onLinkMessage', jsonEncode(message));
+  }
+
+  dynamic _plain(dynamic value) {
+    if (value == null || value is String || value is num || value is bool) {
+      return value;
+    }
     try {
-      final jsonString = js.context['JSON'].callMethod('stringify', [jsObject]);
-      if (jsonString == null) return {};
-      return jsonDecode(jsonString);
-    } catch (e) {
-      return {};
+      final encoded = js.context['JSON'].callMethod('stringify', [value]);
+      if (encoded is! String) {
+        return null;
+      }
+      return jsonDecode(encoded);
+    } catch (error) {
+      return value.toString();
     }
   }
 }

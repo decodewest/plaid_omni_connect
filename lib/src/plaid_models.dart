@@ -3,16 +3,18 @@ class LinkSuccessMetadata {
   final LinkInstitution institution;
   final List<LinkAccount> accounts;
   final String linkSessionId;
-  
+
   LinkSuccessMetadata({
     required this.institution,
     required this.accounts,
     required this.linkSessionId,
   });
-  
+
   factory LinkSuccessMetadata.fromJson(Map<String, dynamic> json) {
     return LinkSuccessMetadata(
-      institution: LinkInstitution.fromJson(Map<String, dynamic>.from(json['institution'] ?? {})),
+      institution: LinkInstitution.fromJson(
+        Map<String, dynamic>.from(json['institution'] ?? {}),
+      ),
       accounts: (json['accounts'] as List? ?? [])
           .map((a) => LinkAccount.fromJson(Map<String, dynamic>.from(a)))
           .toList(),
@@ -25,9 +27,9 @@ class LinkSuccessMetadata {
 class LinkInstitution {
   final String id;
   final String name;
-  
+
   LinkInstitution({required this.id, required this.name});
-  
+
   factory LinkInstitution.fromJson(Map<String, dynamic> json) {
     return LinkInstitution(
       id: json['institution_id'] ?? '',
@@ -43,7 +45,7 @@ class LinkAccount {
   final String? mask;
   final String type;
   final String subtype;
-  
+
   LinkAccount({
     required this.id,
     required this.name,
@@ -51,7 +53,7 @@ class LinkAccount {
     required this.type,
     required this.subtype,
   });
-  
+
   factory LinkAccount.fromJson(Map<String, dynamic> json) {
     return LinkAccount(
       id: json['id'] ?? '',
@@ -69,14 +71,14 @@ class LinkError {
   final String errorMessage;
   final String errorType;
   final String displayMessage;
-  
+
   LinkError({
     required this.errorCode,
     required this.errorMessage,
     required this.errorType,
     required this.displayMessage,
   });
-  
+
   factory LinkError.fromJson(Map<String, dynamic> json) {
     return LinkError(
       errorCode: json['error_code'] ?? '',
@@ -93,14 +95,14 @@ class LinkExitMetadata {
   final String? institutionName;
   final String? linkSessionId;
   final String status;
-  
+
   LinkExitMetadata({
     this.institutionId,
     this.institutionName,
     this.linkSessionId,
     required this.status,
   });
-  
+
   factory LinkExitMetadata.fromJson(Map<String, dynamic> json) {
     return LinkExitMetadata(
       institutionId: json['institution_id'],
@@ -121,7 +123,7 @@ class LinkEventMetadata {
   final String? linkSessionId;
   final String? mfaType;
   final String? viewName;
-  
+
   LinkEventMetadata({
     this.errorCode,
     this.errorMessage,
@@ -132,7 +134,7 @@ class LinkEventMetadata {
     this.mfaType,
     this.viewName,
   });
-  
+
   factory LinkEventMetadata.fromJson(Map<String, dynamic> json) {
     return LinkEventMetadata(
       errorCode: json['error_code'],

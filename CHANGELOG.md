@@ -1,3 +1,11 @@
+## 1.0.6
+
+* Fix Windows Plaid Link so the institution list loads. The page script parses,
+  and Link runs at `https://cdn.plaid.com` instead of `about:blank`.
+* Return success, exit, and error from every platform on the Flutter method
+  channel, including nested institution and account metadata. Events stay open.
+* Share one Link page across iOS, Android, macOS, Windows, and Linux.
+
 ## 1.0.5
 
 * Add Swift Package Manager support for iOS and macOS.

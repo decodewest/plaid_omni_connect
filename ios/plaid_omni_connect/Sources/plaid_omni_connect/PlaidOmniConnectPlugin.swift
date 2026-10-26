@@ -20,8 +20,9 @@ public class PlaidOmniConnectPlugin: NSObject, FlutterPlugin {
          switch call.method {
         case "open":
             guard let args = call.arguments as? [String: Any],
-                  let linkToken = args["linkToken"] as? String else {
-                result(FlutterError(code: "INVALID_ARGS", message: "Missing linkToken", details: nil))
+                  let pageHtml = args["pageHtml"] as? String,
+                  !pageHtml.isEmpty else {
+                result(FlutterError(code: "INVALID_ARGS", message: "Missing pageHtml", details: nil))
                 return
             }
 
@@ -31,7 +32,7 @@ public class PlaidOmniConnectPlugin: NSObject, FlutterPlugin {
             }
 
             linkHandler = PlaidLinkIOHandler(channel: self.channel!, rootViewController: rootViewController)
-            linkHandler?.openPlaidLink(linkToken: linkToken)
+            linkHandler?.openPlaidLink(pageHtml: pageHtml)
             result(nil)
 
         case "close":
@@ -78,6 +79,7 @@ class PlaidLinkIOHandler: NSObject, WKNavigationDelegate, WKScriptMessageHandler
     private var viewController: UIViewController?
     private var rootViewController: UIViewController
     private var channel: FlutterMethodChannel
+    private var finished = false
 
     init(channel: FlutterMethodChannel, rootViewController: UIViewController) {
         self.channel = channel
@@ -85,7 +87,7 @@ class PlaidLinkIOHandler: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         super.init()
     }
 
-    func openPlaidLink(linkToken: String) {
+    func openPlaidLink(pageHtml: String) {
         let config = WKWebViewConfiguration()
         let contentController = WKUserContentController()
         contentController.add(self, name: "plaidLinkHandler")
@@ -98,9 +100,7 @@ class PlaidLinkIOHandler: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         viewController?.view = webView
         viewController?.modalPresentationStyle = .overFullScreen
 
-        // Load Plaid Link
-        let htmlString = createPlaidHTML(linkToken: linkToken)
-        webView?.loadHTMLString(htmlString, baseURL: URL(string: "https://cdn.plaid.com"))
+        webView?.loadHTMLString(pageHtml, baseURL: URL(string: "https://cdn.plaid.com"))
 
         rootViewController.present(viewController!, animated: true)
     }
@@ -111,79 +111,53 @@ class PlaidLinkIOHandler: NSObject, WKNavigationDelegate, WKScriptMessageHandler
         viewController = nil
     }
 
-    private func createPlaidHTML(linkToken: String) -> String {
-        return """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
-            <style>
-                body { margin: 0; padding: 0; }
-                #plaid-container { width: 100vw; height: 100vh; }
-            </style>
-        </head>
-        <body>
-            <script>
-                const handler = Plaid.create({
-                    token: '\(linkToken)',
-                    onSuccess: (public_token, metadata) => {
-                        window.webkit.messageHandlers.plaidLinkHandler.postMessage({
-                            type: 'success',
-                            publicToken: public_token,
-                            metadata: metadata
-                        });
-                    },
-                    onExit: (err, metadata) => {
-                        window.webkit.messageHandlers.plaidLinkHandler.postMessage({
-                            type: 'exit',
-                            error: err,
-                            metadata: metadata
-                        });
-                    },
-                    onEvent: (eventName, metadata) => {
-                        window.webkit.messageHandlers.plaidLinkHandler.postMessage({
-                            type: 'event',
-                            eventName: eventName,
-                            metadata: metadata
-                        });
-                    }
-                });
-                handler.open();
-            </script>
-        </body>
-        </html>
-        """
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard let json = jsonText(from: message.body) else { return }
+        forward(json)
     }
 
-    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard let body = message.body as? [String: Any],
-              let type = body["type"] as? String else { return }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        forward(errorPayload(error.localizedDescription))
+    }
 
-        switch type {
-        case "success":
-            channel.invokeMethod("onSuccess", arguments: [
-                "publicToken": body["publicToken"] ?? "",
-                "metadata": body["metadata"] ?? [:]
-            ])
-            close(animated: true)
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        forward(errorPayload(error.localizedDescription))
+    }
 
-        case "exit":
-            channel.invokeMethod("onExit", arguments: [
-                "error": body["error"] as Any,
-                "metadata": body["metadata"] ?? [:]
-            ])
-            close(animated: true)
-
-        case "event":
-            channel.invokeMethod("onEvent", arguments: [
-                "eventName": body["eventName"] ?? "",
-                "metadata": body["metadata"] ?? [:]
-            ])
-
-        default:
-            break
+    private func forward(_ json: String) {
+        let terminal = isTerminalLinkMessage(json)
+        if terminal {
+            if finished { return }
+            finished = true
         }
+        channel.invokeMethod("onLinkMessage", arguments: json)
+        if terminal {
+            close(animated: true)
+        }
+    }
+
+    private func jsonText(from body: Any) -> String? {
+        if let text = body as? String {
+            return text
+        }
+        guard JSONSerialization.isValidJSONObject(body),
+              let data = try? JSONSerialization.data(withJSONObject: body),
+              let text = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        return text
+    }
+
+    private func errorPayload(_ message: String) -> String {
+        let escaped = message
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "{\"type\":\"error\",\"error\":\"\(escaped)\"}"
+    }
+
+    private func isTerminalLinkMessage(_ json: String) -> Bool {
+        return json.contains("\"type\":\"success\"")
+            || json.contains("\"type\":\"exit\"")
+            || json.contains("\"type\":\"error\"")
     }
 }

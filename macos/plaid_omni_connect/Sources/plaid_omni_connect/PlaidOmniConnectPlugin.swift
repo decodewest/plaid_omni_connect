@@ -19,19 +19,19 @@ public class PlaidOmniConnectPlugin: NSObject, FlutterPlugin {
         switch call.method {
         case "open":
             guard let args = call.arguments as? [String: Any],
-                  let linkToken = args["linkToken"] as? String else {
-                result(FlutterError(code: "INVALID_ARGS", message: "Missing linkToken", details: nil))
+                  let pageHtml = args["pageHtml"] as? String,
+                  !pageHtml.isEmpty else {
+                result(FlutterError(code: "INVALID_ARGS", message: "Missing pageHtml", details: nil))
                 return
             }
             
             let parentWindow = NSApplication.shared.mainWindow
-            // Use the stored channel
             if let channel = self.channel {
                 linkHandler = PlaidLinkHandler(
                     channel: channel,
                     parentWindow: parentWindow
                 )
-                linkHandler?.openPlaidLink(linkToken: linkToken)
+                linkHandler?.openPlaidLink(pageHtml: pageHtml)
                 result(nil)
             } else {
                  result(FlutterError(code: "INTERNAL_ERROR", message: "Channel not initialized", details: nil))

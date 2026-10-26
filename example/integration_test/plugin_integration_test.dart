@@ -15,11 +15,8 @@ import 'package:plaid_omni_connect/plaid_omni_connect.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('getPlatformVersion test', (WidgetTester tester) async {
-    final PlaidOmniConnect plugin = PlaidOmniConnect();
-    final String? version = await plugin.getPlatformVersion();
-    // The version string depends on the host platform running the test, so
-    // just assert that some non-empty string is returned.
-    expect(version?.isNotEmpty, true);
+  testWidgets('link configuration carries the token', (WidgetTester tester) async {
+    const configuration = PlaidLinkConfiguration(linkToken: 'link-sandbox');
+    expect(configuration.linkToken, 'link-sandbox');
   });
 }

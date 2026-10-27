@@ -1,3 +1,9 @@
+## 1.0.7
+
+* Show the Windows Link window on the top-level app window, with an opaque
+  page, and store WebView2 data under LocalAppData so a Program Files install
+  can start the runtime.
+
 ## 1.0.6
 
 * Fix Windows Plaid Link so the institution list loads. The page script parses,

@@ -74,7 +74,7 @@ String buildPlaidLinkPage(String linkToken) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script src="$plaidLinkScriptUrl"></script>
   <style>
-    body { margin: 0; font-family: sans-serif; overflow: hidden; }
+    html, body { margin: 0; background: #fff; color: #111; font-family: sans-serif; overflow: hidden; }
     #container { width: 100%; height: 100vh; }
     .loading { display: flex; align-items: center; justify-content: center; height: 100vh; }
   </style>

@@ -6,6 +6,7 @@
 #include <flutter/plugin_registrar_windows.h>
 #include <flutter/standard_method_codec.h>
 
+#include <shlobj.h>
 #include <shlwapi.h>
 
 #include <memory>
@@ -75,6 +76,68 @@ std::string EscapeJson(const std::string &input) {
 
 std::string ErrorMessage(const std::string &message) {
   return std::string("{\"type\":\"error\",\"error\":\"") + EscapeJson(message) + "\"}";
+}
+
+void EnsureDirectoryTree(const std::wstring &path) {
+  if (path.empty()) {
+    return;
+  }
+  if (CreateDirectoryW(path.c_str(), nullptr) != 0 ||
+      GetLastError() == ERROR_ALREADY_EXISTS) {
+    return;
+  }
+  const auto slash = path.find_last_of(L'\\');
+  if (slash == std::wstring::npos) {
+    return;
+  }
+  EnsureDirectoryTree(path.substr(0, slash));
+  CreateDirectoryW(path.c_str(), nullptr);
+}
+
+std::wstring WebViewUserDataFolder() {
+  std::wstring root;
+  PWSTR known = nullptr;
+  if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_CREATE,
+                                      nullptr, &known)) &&
+      known != nullptr) {
+    root.assign(known);
+    CoTaskMemFree(known);
+  }
+  if (root.empty()) {
+    wchar_t temp[MAX_PATH];
+    const DWORD length = GetTempPathW(MAX_PATH, temp);
+    if (length > 0 && length < MAX_PATH) {
+      root.assign(temp, length);
+    }
+  }
+  while (!root.empty() && (root.back() == L'\\' || root.back() == L'/')) {
+    root.pop_back();
+  }
+  const std::wstring folder = root + L"\\WealthWinds\\PlaidWebView2";
+  EnsureDirectoryTree(folder);
+  return folder;
+}
+
+HWND OwnerWindow(HWND hwnd) {
+  if (hwnd == nullptr) {
+    return nullptr;
+  }
+  const HWND root = GetAncestor(hwnd, GA_ROOT);
+  return root != nullptr ? root : hwnd;
+}
+
+bool SameDocumentUrl(const std::wstring &expected, const wchar_t *actual) {
+  if (actual == nullptr) {
+    return false;
+  }
+  std::wstring uri(actual);
+  auto trim = [](std::wstring value) {
+    while (!value.empty() && (value.back() == L'/' || value.back() == L' ')) {
+      value.pop_back();
+    }
+    return value;
+  };
+  return trim(expected) == trim(uri);
 }
 
 const std::string *StringArg(const flutter::EncodableMap &arguments,
@@ -154,7 +217,7 @@ void PlaidOmniConnectPlugin::OpenPlaidLink(const std::string &page_html,
     ForwardMessage(ErrorMessage("Flutter window is unavailable"));
     return;
   }
-  parent_hwnd_ = registrar_->GetView()->GetNativeWindow();
+  parent_hwnd_ = OwnerWindow(registrar_->GetView()->GetNativeWindow());
   if (parent_hwnd_ == nullptr) {
     ForwardMessage(ErrorMessage("Flutter window is unavailable"));
     return;
@@ -173,10 +236,27 @@ void PlaidOmniConnectPlugin::OpenPlaidLink(const std::string &page_html,
                  GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
   }
 
-  RECT parent_rect;
-  GetWindowRect(parent_hwnd_, &parent_rect);
-  const int x = parent_rect.left + (parent_rect.right - parent_rect.left - 600) / 2;
-  const int y = parent_rect.top + (parent_rect.bottom - parent_rect.top - 800) / 2;
+  RECT parent_rect{};
+  if (!GetWindowRect(parent_hwnd_, &parent_rect)) {
+    parent_rect = RECT{100, 100, 900, 700};
+  }
+  int x = parent_rect.left + (parent_rect.right - parent_rect.left - 600) / 2;
+  int y = parent_rect.top + (parent_rect.bottom - parent_rect.top - 800) / 2;
+  RECT work{};
+  if (SystemParametersInfo(SPI_GETWORKAREA, 0, &work, 0)) {
+    if (x < work.left) {
+      x = work.left;
+    }
+    if (y < work.top) {
+      y = work.top;
+    }
+    if (x + 600 > work.right) {
+      x = work.right - 600;
+    }
+    if (y + 800 > work.bottom) {
+      y = work.bottom - 800;
+    }
+  }
 
   modal_hwnd_ = CreateWindowEx(
       WS_EX_DLGMODALFRAME | WS_EX_TOPMOST, kWindowClassName, L"Connect Your Account",
@@ -189,8 +269,9 @@ void PlaidOmniConnectPlugin::OpenPlaidLink(const std::string &page_html,
   SetWindowLongPtr(modal_hwnd_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
   EnableWindow(parent_hwnd_, FALSE);
 
+  static const std::wstring user_data_folder = WebViewUserDataFolder();
   CreateCoreWebView2EnvironmentWithOptions(
-      nullptr, nullptr, nullptr,
+      nullptr, user_data_folder.c_str(), nullptr,
       Microsoft::WRL::Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
           [this](HRESULT result, ICoreWebView2Environment *env) -> HRESULT {
             if (FAILED(result) || env == nullptr || modal_hwnd_ == nullptr) {
@@ -208,7 +289,17 @@ void PlaidOmniConnectPlugin::OpenPlaidLink(const std::string &page_html,
                         return S_OK;
                       }
                       webview_controller_ = controller;
+                      wil::com_ptr<ICoreWebView2Controller2> controller2;
+                      controller->QueryInterface(IID_PPV_ARGS(&controller2));
+                      if (controller2 != nullptr) {
+                        const COREWEBVIEW2_COLOR background{255, 255, 255, 255};
+                        controller2->put_DefaultBackgroundColor(background);
+                      }
                       webview_controller_->get_CoreWebView2(&webview_);
+                      if (webview_ == nullptr) {
+                        ForwardMessage(ErrorMessage("WebView2 failed to start"));
+                        return S_OK;
+                      }
                       webview_controller_->put_IsVisible(TRUE);
 
                       RECT bounds;
@@ -235,6 +326,8 @@ void PlaidOmniConnectPlugin::OpenPlaidLink(const std::string &page_html,
                               .Get(),
                           &resource_token_);
                       webview_->Navigate(document_url_.c_str());
+                      ShowWindow(modal_hwnd_, SW_SHOW);
+                      SetForegroundWindow(modal_hwnd_);
                       return S_OK;
                     })
                     .Get());
@@ -318,7 +411,7 @@ HRESULT PlaidOmniConnectPlugin::OnWebResourceRequested(
   args->get_Request(&request);
   wil::unique_cotaskmem_string uri;
   request->get_Uri(&uri);
-  if (uri.get() == nullptr || document_url_ != uri.get()) {
+  if (!SameDocumentUrl(document_url_, uri.get())) {
     return S_OK;
   }
 
